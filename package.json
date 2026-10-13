@@ -10,7 +10,7 @@
     "build": "tsc && cdk synth --quiet",
     "watch": "tsc -w",
     "bootstrap": "cdk bootstrap",
-    "deploy": "cdk deploy --require-approval never",
+    "deploy": "bash scripts/check-config.sh && cdk deploy --require-approval never",
     "destroy": "cdk destroy --force",
     "diff": "cdk diff",
     "status": "bash scripts/instances.sh status",

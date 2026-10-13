@@ -4,10 +4,10 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import { Construct } from 'constructs';
 
 export interface GameDevDeskStackProps extends cdk.StackProps {
-  /** CIDR allowed to SSH in, e.g. "203.0.113.7/32". Unset = no SSH port open (use SSM Session Manager). */
+  /** Your SSH public key (contents of ~/.ssh/gamedevdesk.pub). Installed for ec2-user on both machines. */
+  readonly sshPublicKey?: string;
+  /** Your home network, e.g. "203.0.113.7/32". Only this range can reach port 22. */
   readonly sshCidr?: string;
-  /** Name of an existing EC2 key pair for SSH. Unset = no key pair (use SSM Session Manager). */
-  readonly keyPairName?: string;
 }
 
 /**
@@ -29,24 +29,37 @@ export class GameDevDeskStack extends cdk.Stack {
       subnetConfiguration: [{ name: 'public', subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 }],
     });
 
+    if (!props.sshPublicKey || !props.sshCidr) {
+      cdk.Annotations.of(this).addWarning(
+        'sshPublicKey and/or sshCidr are not filled in cdk.json: SSH is disabled until you set both.',
+      );
+    }
+
     const sg = new ec2.SecurityGroup(this, 'MachinesSg', {
       vpc,
       description: 'Game dev machines',
       allowAllOutbound: true,
     });
-    if (props.sshCidr) {
-      sg.addIngressRule(ec2.Peer.ipv4(props.sshCidr), ec2.Port.tcp(22), 'SSH');
+    if (props.sshCidr && props.sshPublicKey) {
+      sg.addIngressRule(ec2.Peer.ipv4(props.sshCidr), ec2.Port.tcp(22), 'SSH from home network');
     }
 
-    // Lets you connect with `aws ssm start-session` without opening any port.
+    // Also allows `aws ssm start-session` as a fallback when your home IP changes.
     const role = new iam.Role(this, 'MachinesRole', {
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
       managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore')],
     });
 
-    const keyPair = props.keyPairName
-      ? ec2.KeyPair.fromKeyPairName(this, 'KeyPair', props.keyPairName)
-      : undefined;
+    // Imports your public key as an EC2 key pair; the private key never leaves your computer.
+    // Plain CfnKeyPair so no key type is sent: ed25519 and RSA keys both import as-is.
+    let keyPair: ec2.IKeyPair | undefined;
+    if (props.sshPublicKey) {
+      const cfnKey = new ec2.CfnKeyPair(this, 'KeyPair', {
+        keyName: 'gamedevdesk',
+        publicKeyMaterial: props.sshPublicKey,
+      });
+      keyPair = ec2.KeyPair.fromKeyPairName(this, 'ImportedKeyPair', cfnKey.ref);
+    }
 
     const disk = (sizeGb: number) => [
       {
