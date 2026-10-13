@@ -1,0 +1,22 @@
+{
+  "app": "npx ts-node --prefer-ts-exts bin/gamedevdesk.ts",
+  "watch": {
+    "include": [
+      "**"
+    ],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "**/*.d.ts",
+      "**/*.js",
+      "tsconfig.json",
+      "package*.json",
+      "node_modules"
+    ]
+  },
+  "context": {
+    "region": "us-east-1",
+    "sshPublicKey": "REPLACE_WITH_YOUR_SSH_PUBLIC_KEY",
+    "sshCidr": "REPLACE_WITH_YOUR_HOME_IP/32"
+  }
+}
